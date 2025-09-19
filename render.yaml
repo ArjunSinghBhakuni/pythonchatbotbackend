@@ -2,7 +2,7 @@ specVersion: 1
 services:
   - type: web
     name: pythonchatbotbackend
-    env: python
+    runtime: python
     plan: free
     envVars:
       - key: PYTHON_VERSION
