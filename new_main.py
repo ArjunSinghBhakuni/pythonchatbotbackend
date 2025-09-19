@@ -9,9 +9,8 @@ from datetime import datetime
 import hashlib
 
 from simple_database import simple_db_manager
-from embedding_service import embedding_service
+from gemini_embedding_service import gemini_embedding_service
 from ollama_service import ollama_service
-from pdf_processor import PDFProcessor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,7 +28,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-pdf_processor = PDFProcessor()
 UPLOADS_FOLDER = "uploads"
 
 @app.on_event("startup")
@@ -38,11 +36,8 @@ async def startup_event():
         simple_db_manager.test_connection()
         simple_db_manager.create_tables()
         
-        # Create uploads folder if it doesn't exist
+        # Create uploads folder if it doesn't exist (kept for backward compatibility)
         os.makedirs(UPLOADS_FOLDER, exist_ok=True)
-        
-        # Auto-train from uploads folder
-        await auto_train_from_uploads()
         
         logger.info("Application startup completed successfully")
     except Exception as e:
@@ -50,61 +45,8 @@ async def startup_event():
         raise
 
 async def auto_train_from_uploads():
-    """Automatically train AI from all PDFs in uploads folder"""
-    try:
-        pdf_files = glob.glob(os.path.join(UPLOADS_FOLDER, "*.pdf"))
-        
-        if not pdf_files:
-            logger.info("No PDF files found in uploads folder")
-            return
-        
-        logger.info(f"Found {len(pdf_files)} PDF files to process")
-        
-        for pdf_file in pdf_files:
-            try:
-                logger.info(f"Processing: {pdf_file}")
-                
-                # Extract text from PDF
-                with open(pdf_file, 'rb') as f:
-                    content = f.read()
-                text_content = pdf_processor.extract_text_from_pdf_content(content)
-                
-                if not text_content.strip():
-                    logger.warning(f"No text extracted from {pdf_file}")
-                    continue
-                
-                # Split into chunks
-                chunks = pdf_processor.chunk_text(text_content)
-                
-                # Store chunks in database
-                db = next(simple_db_manager.get_db())
-                try:
-                    for chunk in chunks:
-                        embedding = embedding_service.generate_embedding(chunk)
-                        
-                        # Convert embedding to proper format for PostgreSQL vector
-                        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-                        
-                        # Use f-string to avoid parameter binding issues
-                        db.execute(text(f"""
-                            INSERT INTO embeddings (session_name, content, embedding)
-                            VALUES ('knowledge_base', :content, '{embedding_str}'::vector)
-                        """), {
-                            "content": chunk
-                        })
-                    
-                    db.commit()
-                    logger.info(f"Successfully processed {pdf_file}: {len(chunks)} chunks")
-                    
-                finally:
-                    db.close()
-                    
-            except Exception as e:
-                logger.error(f"Error processing {pdf_file}: {e}")
-                continue
-                
-    except Exception as e:
-        logger.error(f"Error in auto_train_from_uploads: {e}")
+    """Deprecated: PDF auto-training removed. No-op."""
+    logger.info("auto_train_from_uploads is deprecated and has been disabled.")
 
 @app.get("/health")
 async def health_check():
@@ -123,7 +65,8 @@ async def chat(
             logger.info(f"Cache hit for query: '{message}'")
             return response_cache[cache_key]
         
-        query_embedding = embedding_service.generate_embedding(message)
+        # Generate embedding at request time using Gemini
+        query_embedding = gemini_embedding_service.generate_embedding(message)
         
         # Search all knowledge base with retry logic
         max_retries = 3
@@ -203,21 +146,15 @@ async def risk_assessment(
 ):
     """Complex risk assessment endpoint"""
     try:
-        # Handle file upload if provided
+        # PDF processing removed; only consider optional text_content
         additional_context = ""
-        if file:
-            if file.filename.endswith('.pdf'):
-                content = await file.read()
-                additional_context = pdf_processor.extract_text_from_pdf_content(content)
-            else:
-                # For images, we'll just note that an image was provided
-                additional_context = f"[Image file provided: {file.filename}]"
         
         if text_content:
             additional_context += f"\n\nAdditional text: {text_content}"
         
         # Get relevant knowledge base content
-        query_embedding = embedding_service.generate_embedding(query)
+        # Generate embedding at request time using Gemini
+        query_embedding = gemini_embedding_service.generate_embedding(query)
         
         result = db.execute(text(f"""
             SELECT content, 
@@ -360,24 +297,8 @@ async def knowledge_stats(db: Session = Depends(simple_db_manager.get_db)):
 
 @app.post("/retrain")
 async def retrain():
-    """Manually retrain from uploads folder"""
-    try:
-        # Clear existing knowledge base
-        db = next(simple_db_manager.get_db())
-        try:
-            db.execute(text("DELETE FROM embeddings WHERE session_name = 'knowledge_base'"))
-            db.commit()
-        finally:
-            db.close()
-        
-        # Retrain from uploads
-        await auto_train_from_uploads()
-        
-        return {"message": "Retraining completed successfully"}
-        
-    except Exception as e:
-        logger.error(f"Error in retrain: {e}")
-        raise HTTPException(status_code=500, detail="Error during retraining")
+    """Deprecated: Retraining disabled (no PDF processing)."""
+    return {"message": "Retraining is disabled. Upload-based training has been removed."}
 
 if __name__ == "__main__":
     import uvicorn
