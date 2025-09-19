@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class GeminiAIService:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY", "AIzaSyCk1XOPzJ8tTBTczHPhILjjEtzjAuGKLq4")
+        # Support both env var names
+        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
         genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
         logger.info("Gemini AI Service initialized")
