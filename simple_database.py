@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 
 class SimpleDatabaseManager:
     def __init__(self):
-        # Database configuration with better SSL handling
-        DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_vu96xtNThwRn@ep-fancy-dream-adb1zo00-pooler.c-2.us-east-1.aws.neon.tech:5432/dpcDB?sslmode=require&sslcert=&sslkey=&sslrootcert=")
+        # Database configuration (uses provided Neon URL by default; env can override)
+        DATABASE_URL = os.getenv(
+            "DATABASE_URL",
+            "postgresql://neondb_owner:npg_vu96xtNThwRn@ep-fancy-dream-adb1zo00-pooler.c-2.us-east-1.aws.neon.tech:5432/dpcDB?sslmode=require&channel_binding=require"
+        )
         self.engine = create_engine(
             DATABASE_URL,
             pool_pre_ping=True,
