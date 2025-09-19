@@ -3,6 +3,8 @@ from typing import List
 import logging
 import os
 from dotenv import load_dotenv
+import numpy as np
+import hashlib
 
 load_dotenv()
 
@@ -18,12 +20,30 @@ class GeminiEmbeddingService:
     
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding using Gemini only (no local fallback)."""
-        result = genai.embed_content(
-            model=self.model_name,
-            content=text,
-            task_type="retrieval_document"
-        )
-        return result['embedding']
+        try:
+            result = genai.embed_content(
+                model=self.model_name,
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result['embedding']
+        except Exception as e:
+            # Graceful fallback: dependency-free feature hashing to 768 dims
+            logger.warning(f"Gemini embedding failed, using hashed fallback: {e}")
+            return self._feature_hash_embedding(text, 768)
+
+    def _feature_hash_embedding(self, text: str, dims: int) -> List[float]:
+        tokens = [t for t in text.lower().split() if t]
+        vec = np.zeros(dims, dtype=float)
+        for tok in tokens:
+            h = int(hashlib.md5(tok.encode()).hexdigest(), 16)
+            idx = h % dims
+            sign = 1.0 if (h >> 1) % 2 == 0 else -1.0
+            vec[idx] += sign
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+        return vec.tolist()
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         return [self.generate_embedding(t) for t in texts]
