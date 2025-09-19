@@ -1,7 +1,7 @@
 services:
   - type: web
     name: pythonchatbotbackend
-    runtime: python3
+    env: python
     plan: free
     envVars:
       - key: PYTHON_VERSION
